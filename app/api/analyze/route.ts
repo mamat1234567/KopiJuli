@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         id: itemId,
         name: productMap[itemId] || itemId,
       })),
-      support: itemset.support,
+      support: itemset.support, 
     }))
 
     const formattedRules = rules.map((rule) => ({

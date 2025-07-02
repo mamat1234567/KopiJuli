@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] bg-gradient-to-b from-slate-50 to-slate-100 p-4">
       <div className="max-w-3xl w-full text-center space-y-8">
-        <h1 className="text-4xl font-bold tracking-tight">Analisis Penjualan dengan Data Mining</h1>
+        <h1 className="text-4xl font-bold tracking-tight">Analisis Penjualan dengan Data</h1>
         <p className="text-lg text-slate-600">
           Unggah data penjualan Anda dalam format CSV untuk menemukan pola pembelian dan rekomendasi bundling produk
           menggunakan algoritma data mining.

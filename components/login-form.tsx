@@ -10,7 +10,7 @@ import { Coffee, Lock, Mail } from "lucide-react"
 
 // Hardcoded user accounts
 const VALID_ACCOUNTS = [
-  { email: "admin@gmail.com", password: "admin123", name: "Administrator" },
+  { email: "Juli12@gmail.com", password: "Juli1206", name: "Administrator" },
   { email: "user1@gmail.com", password: "user123", name: "User 1" },
   { email: "user2@gmail.com", password: "user123", name: "User 2" },
   { email: "user3@gmail.com", password: "user123", name: "User 3" },

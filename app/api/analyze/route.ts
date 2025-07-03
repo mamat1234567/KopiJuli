@@ -281,6 +281,12 @@ function runEclat(transactions, allProducts, minSupport, transactionCount, proce
 }
 
 // FP-Growth algorithm implementation - using horizontal database and pattern growth
+// This implementation counts 1-itemsets, 2-itemsets, and 3-itemsets
+// Input parameters: transactions: array transaksi, setiap transaksi memiliki items
+// allProducts: daftar semua produk unik, minSupport: minimal support (misal 0.01)
+// transactionCount: jumlah total transaksi
+
+processLog: array untuk mencatat log proses
 function runFPGrowth(transactions, allProducts, minSupport, transactionCount, processLog) {
   const minSupportCount = Math.ceil(minSupport * transactionCount)
 

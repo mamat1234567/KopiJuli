@@ -285,8 +285,7 @@ function runEclat(transactions, allProducts, minSupport, transactionCount, proce
 // Input parameters: transactions: array transaksi, setiap transaksi memiliki items
 // allProducts: daftar semua produk unik, minSupport: minimal support (misal 0.01)
 // transactionCount: jumlah total transaksi
-
-processLog: array untuk mencatat log proses
+// processLog: array untuk mencatat log proses
 function runFPGrowth(transactions, allProducts, minSupport, transactionCount, processLog) {
   const minSupportCount = Math.ceil(minSupport * transactionCount)
 

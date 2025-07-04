@@ -54,20 +54,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No product name column found" }, { status: 400 })
     }
 
+    // Find date column (optional for daily pattern analysis)
+    const dateCol = headers.find(
+      (col) => col.toLowerCase().includes("tanggal") || 
+               col.toLowerCase().includes("date") ||
+               col.toLowerCase().includes("waktu") ||
+               col.toLowerCase().includes("time")
+    )
+
     // Clean data - remove rows with missing values in required columns
     const cleanRecords = records.filter(
-      (record) => record[invoiceCol] && record[productIdCol] && record[productNameCol],
+      (record: any) => record[invoiceCol] && record[productIdCol] && record[productNameCol],
     )
 
     // Create product map
     const productMap: Record<string, string> = {}
-    cleanRecords.forEach((record) => {
+    cleanRecords.forEach((record: any) => {
       productMap[String(record[productIdCol])] = String(record[productNameCol])
     })
 
     // Group by invoice to create transactions
-    const invoiceGroups: Record<string, Array<{ id: string; name: string }>> = {}
-    cleanRecords.forEach((record) => {
+    const invoiceGroups: Record<string, Array<{ id: string; name: string; date?: string }>> = {}
+    cleanRecords.forEach((record: any) => {
       const invoice = String(record[invoiceCol])
       if (!invoiceGroups[invoice]) {
         invoiceGroups[invoice] = []
@@ -76,10 +84,17 @@ export async function POST(request: NextRequest) {
       // Avoid duplicates
       const productId = String(record[productIdCol])
       if (!invoiceGroups[invoice].some((item) => item.id === productId)) {
-        invoiceGroups[invoice].push({
+        const item: { id: string; name: string; date?: string } = {
           id: productId,
           name: String(record[productNameCol]),
-        })
+        }
+        
+        // Add date if available
+        if (dateCol && record[dateCol]) {
+          item.date = String(record[dateCol])
+        }
+        
+        invoiceGroups[invoice].push(item)
       }
     })
 
@@ -87,6 +102,7 @@ export async function POST(request: NextRequest) {
     const transactions = Object.keys(invoiceGroups).map((invoice) => ({
       invoiceNo: invoice,
       items: invoiceGroups[invoice],
+      date: invoiceGroups[invoice][0]?.date || null, // Use date from first item
     }))
 
     // Calculate statistics
@@ -109,6 +125,8 @@ export async function POST(request: NextRequest) {
       processed_preview: processedPreview,
       transactions: transactions,
       product_map: productMap,
+      has_date_column: !!dateCol,
+      date_column: dateCol,
     })
   } catch (error) {
     console.error("Error in preprocess handler:", error)

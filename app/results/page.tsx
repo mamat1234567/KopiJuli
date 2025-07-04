@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, FileDown, Home, BarChartIcon, PieChartIcon, GitCompare } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   BarChart,
@@ -50,6 +51,22 @@ interface AlgorithmParams {
   productCount: number
 }
 
+interface DailyPattern {
+  date: string
+  frequentItemsets: Array<{
+    items: Array<{ id: string; name: string }>
+    support: number
+  }>
+  associationRules: Array<{
+    antecedent: Array<{ id: string; name: string }>
+    consequent: Array<{ id: string; name: string }>
+    support: number
+    confidence: number
+    lift: number
+  }>
+  transactionCount: number
+}
+
 export default function ResultsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -62,6 +79,13 @@ export default function ResultsPage() {
   const [topBundlingOptions, setTopBundlingOptions] = useState<any[]>([])
   const [scatterData, setScatterData] = useState<any[]>([])
   const [processLogs, setProcessLogs] = useState<Record<string, string[]>>({})
+  const [dailyPattern, setDailyPattern] = useState<DailyPattern | null>(null)
+  const [dailyPatternLoading, setDailyPatternLoading] = useState(false)
+  const [dailyPatternError, setDailyPatternError] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string>("")
+  const [dailyBundlingOptions, setDailyBundlingOptions] = useState<any[]>([])
+  const [hasDateColumn, setHasDateColumn] = useState(false)
+  const [availableDates, setAvailableDates] = useState<string[]>([])
 
   const COLORS = [
     "#0088FE",
@@ -88,6 +112,49 @@ export default function ResultsPage() {
 
       const parsedParams = JSON.parse(storedParams) as AlgorithmParams
       setParams(parsedParams)
+
+      // Check if data has date column
+      const storedTransactions = localStorage.getItem("transactions")
+      if (storedTransactions) {
+        const transactions = JSON.parse(storedTransactions)
+        const hasDate = transactions.some((t: any) => t.date)
+        setHasDateColumn(hasDate)
+        
+        if (hasDate) {
+          // Extract unique dates from transactions with transaction counts
+          const dateStats = new Map<string, number>()
+          transactions.forEach((transaction: any) => {
+            if (transaction.date) {
+              try {
+                // Parse date and format consistently
+                let formattedDate: string
+                if (transaction.date.includes('/')) {
+                  // Handle DD/MM/YYYY format
+                  const [day, month, year] = transaction.date.split('/')
+                  const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+                  formattedDate = dateObj.toISOString().split('T')[0]
+                } else {
+                  // Handle other formats
+                  const dateObj = new Date(transaction.date)
+                  formattedDate = dateObj.toISOString().split('T')[0]
+                }
+                dateStats.set(formattedDate, (dateStats.get(formattedDate) || 0) + 1)
+              } catch (error) {
+                console.warn('Failed to parse date:', transaction.date)
+              }
+            }
+          })
+          
+          // Sort dates in descending order (newest first)
+          const sortedDates = Array.from(dateStats.keys()).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+          setAvailableDates(sortedDates)
+          
+          // Set default date to the latest available date
+          if (sortedDates.length > 0) {
+            setSelectedDate(sortedDates[0])
+          }
+        }
+      }
 
       console.log(`Displaying results for algorithm: ${parsedParams.algorithm}`)
 
@@ -181,6 +248,232 @@ export default function ResultsPage() {
     })
 
     setScatterData(data)
+  }
+
+  // Function to get transaction count for a specific date
+  const getTransactionCountForDate = (date: string): number => {
+    const storedTransactions = localStorage.getItem("transactions")
+    if (!storedTransactions) return 0
+
+    const transactions = JSON.parse(storedTransactions)
+    let count = 0
+    
+    transactions.forEach((transaction: any) => {
+      if (transaction.date) {
+        try {
+          let transactionDate: string
+          if (transaction.date.includes('/')) {
+            const [day, month, year] = transaction.date.split('/')
+            const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+            transactionDate = dateObj.toISOString().split('T')[0]
+          } else {
+            const dateObj = new Date(transaction.date)
+            transactionDate = dateObj.toISOString().split('T')[0]
+          }
+          if (transactionDate === date) {
+            count++
+          }
+        } catch {
+          // Ignore invalid dates
+        }
+      }
+    })
+    
+    return count
+  }
+
+  // Function to analyze daily bundling pattern based on previous day
+  const analyzeDailyBundlingPattern = async (targetDate: string) => {
+    if (!params || !hasDateColumn || !targetDate) return
+
+    // Check if target date is in available dates
+    if (!availableDates.includes(targetDate)) {
+      setDailyPatternError("Tanggal yang dipilih tidak tersedia dalam dataset")
+      return
+    }
+
+    setDailyPatternLoading(true)
+    setDailyPatternError(null)
+
+    try {
+      // Calculate previous day
+      const target = new Date(targetDate)
+      const previousDay = new Date(target)
+      previousDay.setDate(target.getDate() - 1)
+      const previousDateStr = previousDay.toISOString().split('T')[0]
+
+      // Check if previous day data exists in available dates
+      if (!availableDates.includes(previousDateStr)) {
+        // Find the closest previous date that exists in the dataset
+        const targetTime = previousDay.getTime()
+        const closestPreviousDate = availableDates
+          .filter(date => new Date(date).getTime() < targetTime)
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
+        
+        if (!closestPreviousDate) {
+          throw new Error(`Tidak ada data transaksi sebelum tanggal ${targetDate}`)
+        }
+        
+        // Use the closest previous date
+        const actualPreviousDate = closestPreviousDate
+        
+        // Get transactions from localStorage
+        const storedTransactions = localStorage.getItem("transactions")
+        if (!storedTransactions) {
+          throw new Error("Data transaksi tidak ditemukan")
+        }
+
+        const allTransactions = JSON.parse(storedTransactions)
+        
+        // Filter transactions for the actual previous day
+        const previousDayTransactions = allTransactions.filter((transaction: any) => {
+          if (!transaction.date) return false
+          
+          try {
+            let transactionDate: string
+            if (transaction.date.includes('/')) {
+              // Handle DD/MM/YYYY format
+              const [day, month, year] = transaction.date.split('/')
+              const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+              transactionDate = dateObj.toISOString().split('T')[0]
+            } else {
+              const dateObj = new Date(transaction.date)
+              transactionDate = dateObj.toISOString().split('T')[0]
+            }
+            return transactionDate === actualPreviousDate
+          } catch {
+            return false
+          }
+        })
+
+        if (previousDayTransactions.length === 0) {
+          throw new Error(`Tidak ada data transaksi untuk tanggal ${actualPreviousDate}`)
+        }
+
+        // Continue with analysis using actualPreviousDate
+        return await performAnalysis(previousDayTransactions, actualPreviousDate, targetDate)
+      } else {
+        // Use the calculated previous day
+        return await performAnalysis(null, previousDateStr, targetDate)
+      }
+    } catch (error) {
+      console.error("Error analyzing daily pattern:", error)
+      setDailyPatternError(error instanceof Error ? error.message : "Terjadi kesalahan saat menganalisis pola harian")
+    } finally {
+      setDailyPatternLoading(false)
+    }
+  }
+
+  // Helper function to perform the actual analysis
+  const performAnalysis = async (preFilteredTransactions: any[] | null, analysisDate: string, targetDate: string) => {
+    try {
+      let previousDayTransactions: any[]
+      
+      if (preFilteredTransactions) {
+        previousDayTransactions = preFilteredTransactions
+      } else {
+        // Get transactions from localStorage
+        const storedTransactions = localStorage.getItem("transactions")
+        if (!storedTransactions) {
+          throw new Error("Data transaksi tidak ditemukan")
+        }
+
+        const allTransactions = JSON.parse(storedTransactions)
+        
+        // Filter transactions for the analysis date
+        previousDayTransactions = allTransactions.filter((transaction: any) => {
+          if (!transaction.date) return false
+          
+          try {
+            let transactionDate: string
+            if (transaction.date.includes('/')) {
+              // Handle DD/MM/YYYY format
+              const [day, month, year] = transaction.date.split('/')
+              const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+              transactionDate = dateObj.toISOString().split('T')[0]
+            } else {
+              const dateObj = new Date(transaction.date)
+              transactionDate = dateObj.toISOString().split('T')[0]
+            }
+            return transactionDate === analysisDate
+          } catch {
+            return false
+          }
+        })
+      }
+
+      if (previousDayTransactions.length === 0) {
+        throw new Error(`Tidak ada data transaksi untuk tanggal ${analysisDate}`)
+      }
+
+      // Get productMap from localStorage
+      const storedProductMap = localStorage.getItem("productMap")
+      if (!storedProductMap) {
+        throw new Error("Product map tidak ditemukan")
+      }
+      const productMap = JSON.parse(storedProductMap)
+
+      // Prepare data for analysis with the same algorithm and parameters
+      const analysisData = {
+        transactions: previousDayTransactions,
+        productMap: productMap,
+        algorithm: params!.algorithm,
+        minSupport: params!.minSupport,
+        minConfidence: params!.minConfidence,
+      }
+
+      // Call analyze API for previous day data
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(analysisData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Gagal menganalisis pola harian")
+      }
+
+      const result = await response.json()
+
+      // Process the results for daily pattern
+      const dailyResult: DailyPattern = {
+        date: analysisDate,
+        frequentItemsets: result.frequent_itemsets || [],
+        associationRules: result.association_rules || [],
+        transactionCount: previousDayTransactions.length,
+      }
+
+      setDailyPattern(dailyResult)
+
+      // Prepare daily bundling options similar to main bundling options
+      if (result.association_rules && result.association_rules.length > 0) {
+        const dailyOptions = result.association_rules
+          .sort((a: any, b: any) => b.lift - a.lift)
+          .slice(0, 10)
+          .map((rule: any, index: number) => {
+            const allItems = [...rule.antecedent, ...rule.consequent]
+            return {
+              rank: index + 1,
+              items: allItems.map((item: any) => item.name).join(" + "),
+              support: rule.support,
+              confidence: rule.confidence,
+              lift: rule.lift,
+              count: Math.round(rule.support * previousDayTransactions.length),
+              itemCount: allItems.length,
+              analysisDate: analysisDate,
+              targetDate: targetDate,
+            }
+          })
+
+        setDailyBundlingOptions(dailyOptions)
+      }
+
+    } catch (error) {
+      throw error // Re-throw to be caught by parent function
+    }
   }
 
   const handleExport = () => {
@@ -598,10 +891,11 @@ export default function ResultsPage() {
               </Card>
 
               <Tabs defaultValue="visualization">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="visualization">Visualisasi</TabsTrigger>
                   <TabsTrigger value="algorithm">Visualisasi Algoritma</TabsTrigger>
                   <TabsTrigger value="details">Detail Hasil</TabsTrigger>
+                  {hasDateColumn && <TabsTrigger value="daily-pattern">Pola Harian</TabsTrigger>}
                 </TabsList>
 
                 <TabsContent value="visualization" className="mt-4">
@@ -810,6 +1104,193 @@ export default function ResultsPage() {
                     </TabsContent>
                   </Tabs>
                 </TabsContent>
+
+                {hasDateColumn && (
+                  <TabsContent value="daily-pattern" className="mt-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Analisis Pola Bundling Harian</CardTitle>
+                        <CardDescription>
+                          Analisis pola bundling berdasarkan data hari sebelumnya
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="bg-blue-50 p-4 rounded-lg border">
+                          <h4 className="font-medium text-blue-800 mb-2">Informasi Dataset</h4>
+                          <p className="text-sm text-blue-700">
+                            Dataset memiliki {availableDates.length} hari dengan data transaksi.
+                            Tanggal tersedia: {availableDates.length > 0 && (() => {
+                              const firstDate = new Date(availableDates[availableDates.length - 1])
+                              const lastDate = new Date(availableDates[0])
+                              const firstDisplay = `${firstDate.getDate().toString().padStart(2, '0')}/${(firstDate.getMonth() + 1).toString().padStart(2, '0')}/${firstDate.getFullYear()}`
+                              const lastDisplay = `${lastDate.getDate().toString().padStart(2, '0')}/${(lastDate.getMonth() + 1).toString().padStart(2, '0')}/${lastDate.getFullYear()}`
+                              return `${firstDisplay} s/d ${lastDisplay}`
+                            })()}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                          <label htmlFor="target-date" className="text-sm font-medium">
+                            Pilih Tanggal Target:
+                          </label>
+                          <Select value={selectedDate} onValueChange={setSelectedDate}>
+                            <SelectTrigger className="w-48">
+                              <SelectValue placeholder="Pilih tanggal..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableDates.map((date) => {
+                                // Format date for display (DD/MM/YYYY)
+                                const dateObj = new Date(date)
+                                const displayDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`
+                                const dayName = dateObj.toLocaleDateString('id-ID', { weekday: 'long' })
+                                const transactionCount = getTransactionCountForDate(date)
+                                
+                                return (
+                                  <SelectItem key={date} value={date}>
+                                    {displayDate} ({dayName}) - {transactionCount} transaksi
+                                  </SelectItem>
+                                )
+                              })}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            onClick={() => analyzeDailyBundlingPattern(selectedDate)}
+                            disabled={!selectedDate || dailyPatternLoading || availableDates.length === 0}
+                          >
+                            {dailyPatternLoading ? "Menganalisis..." : "Analisis Pola"}
+                          </Button>
+                        </div>
+
+                        {availableDates.length === 0 && hasDateColumn && (
+                          <Alert>
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Info</AlertTitle>
+                            <AlertDescription>
+                              Tidak ada tanggal yang valid ditemukan dalam dataset.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+
+                        {selectedDate && (
+                          <div className="text-sm text-muted-foreground">
+                            Akan menganalisis data dari: {(() => {
+                              const targetDateObj = new Date(selectedDate)
+                              const previousDateObj = new Date(targetDateObj)
+                              previousDateObj.setDate(targetDateObj.getDate() - 1)
+                              const displayDate = `${previousDateObj.getDate().toString().padStart(2, '0')}/${(previousDateObj.getMonth() + 1).toString().padStart(2, '0')}/${previousDateObj.getFullYear()}`
+                              const dayName = previousDateObj.toLocaleDateString('id-ID', { weekday: 'long' })
+                              return `${displayDate} (${dayName})`
+                            })()}
+                          </div>
+                        )}
+
+                        {dailyPatternError && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Error</AlertTitle>
+                            <AlertDescription>{dailyPatternError}</AlertDescription>
+                          </Alert>
+                        )}
+
+                        {dailyPattern && (
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardDescription>Tanggal Analisis</CardDescription>
+                                  <CardTitle className="text-2xl">{dailyPattern.date}</CardTitle>
+                                </CardHeader>
+                              </Card>
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardDescription>Total Transaksi</CardDescription>
+                                  <CardTitle className="text-2xl">{dailyPattern.transactionCount}</CardTitle>
+                                </CardHeader>
+                              </Card>
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardDescription>Frequent Itemsets</CardDescription>
+                                  <CardTitle className="text-2xl">{dailyPattern.frequentItemsets.length}</CardTitle>
+                                </CardHeader>
+                              </Card>
+                            </div>
+
+                            {dailyBundlingOptions.length > 0 && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>Top 10 Rekomendasi Bundling Harian</CardTitle>
+                                  <CardDescription>
+                                    Berdasarkan data transaksi tanggal {dailyPattern.date}
+                                  </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="border rounded-md overflow-auto max-h-96">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Rank</TableHead>
+                                          <TableHead>Bundle Items</TableHead>
+                                          <TableHead className="text-right">Support</TableHead>
+                                          <TableHead className="text-right">Confidence</TableHead>
+                                          <TableHead className="text-right">Lift</TableHead>
+                                          <TableHead className="text-right">Count</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {dailyBundlingOptions.map((bundle, index) => (
+                                          <TableRow key={index}>
+                                            <TableCell className="font-medium">{bundle.rank}</TableCell>
+                                            <TableCell className="max-w-xs truncate">{bundle.items}</TableCell>
+                                            <TableCell className="text-right">{(bundle.support * 100).toFixed(2)}%</TableCell>
+                                            <TableCell className="text-right">{(bundle.confidence * 100).toFixed(2)}%</TableCell>
+                                            <TableCell className="text-right">{bundle.lift.toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">{bundle.count}</TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>Frequent Itemsets Harian</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="border rounded-md overflow-auto max-h-96">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>No</TableHead>
+                                        <TableHead>Itemset</TableHead>
+                                        <TableHead className="text-right">Support</TableHead>
+                                        <TableHead className="text-right">Count</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {dailyPattern.frequentItemsets.slice(0, 20).map((itemset, index) => (
+                                        <TableRow key={index}>
+                                          <TableCell>{index + 1}</TableCell>
+                                          <TableCell>{itemset.items.map((item) => item.name).join(", ")}</TableCell>
+                                          <TableCell className="text-right">{(itemset.support * 100).toFixed(2)}%</TableCell>
+                                          <TableCell className="text-right">
+                                            {Math.round(itemset.support * dailyPattern.transactionCount)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                )}
               </Tabs>
 
               <div className="flex items-center space-x-4 pt-4">

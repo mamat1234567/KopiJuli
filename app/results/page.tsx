@@ -86,6 +86,9 @@ export default function ResultsPage() {
   const [dailyBundlingOptions, setDailyBundlingOptions] = useState<any[]>([])
   const [hasDateColumn, setHasDateColumn] = useState(false)
   const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [weeklyPredictions, setWeeklyPredictions] = useState<{[key: string]: any}>({})
+  const [weeklyPredictionLoading, setWeeklyPredictionLoading] = useState(false)
+  const [weeklyPredictionError, setWeeklyPredictionError] = useState<string | null>(null)
 
   const COLORS = [
     "#0088FE",
@@ -282,7 +285,7 @@ export default function ResultsPage() {
     return count
   }
 
-  // Function to analyze daily bundling pattern based on previous day
+  // Function to analyze bundling pattern based on same day of week
   const analyzeDailyBundlingPattern = async (targetDate: string) => {
     if (!params || !hasDateColumn || !targetDate) return
 
@@ -296,114 +299,42 @@ export default function ResultsPage() {
     setDailyPatternError(null)
 
     try {
-      // Calculate previous day
-      const target = new Date(targetDate)
-      const previousDay = new Date(target)
-      previousDay.setDate(target.getDate() - 1)
-      const previousDateStr = previousDay.toISOString().split('T')[0]
-
-      // Check if previous day data exists in available dates
-      if (!availableDates.includes(previousDateStr)) {
-        // Find the closest previous date that exists in the dataset
-        const targetTime = previousDay.getTime()
-        const closestPreviousDate = availableDates
-          .filter(date => new Date(date).getTime() < targetTime)
-          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
-        
-        if (!closestPreviousDate) {
-          throw new Error(`Tidak ada data transaksi sebelum tanggal ${targetDate}`)
-        }
-        
-        // Use the closest previous date
-        const actualPreviousDate = closestPreviousDate
-        
-        // Get transactions from localStorage
-        const storedTransactions = localStorage.getItem("transactions")
-        if (!storedTransactions) {
-          throw new Error("Data transaksi tidak ditemukan")
-        }
-
-        const allTransactions = JSON.parse(storedTransactions)
-        
-        // Filter transactions for the actual previous day
-        const previousDayTransactions = allTransactions.filter((transaction: any) => {
-          if (!transaction.date) return false
-          
-          try {
-            let transactionDate: string
-            if (transaction.date.includes('/')) {
-              // Handle DD/MM/YYYY format
-              const [day, month, year] = transaction.date.split('/')
-              const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
-              transactionDate = dateObj.toISOString().split('T')[0]
-            } else {
-              const dateObj = new Date(transaction.date)
-              transactionDate = dateObj.toISOString().split('T')[0]
-            }
-            return transactionDate === actualPreviousDate
-          } catch {
-            return false
-          }
-        })
-
-        if (previousDayTransactions.length === 0) {
-          throw new Error(`Tidak ada data transaksi untuk tanggal ${actualPreviousDate}`)
-        }
-
-        // Continue with analysis using actualPreviousDate
-        return await performAnalysis(previousDayTransactions, actualPreviousDate, targetDate)
-      } else {
-        // Use the calculated previous day
-        return await performAnalysis(null, previousDateStr, targetDate)
-      }
-    } catch (error) {
-      console.error("Error analyzing daily pattern:", error)
-      setDailyPatternError(error instanceof Error ? error.message : "Terjadi kesalahan saat menganalisis pola harian")
-    } finally {
-      setDailyPatternLoading(false)
-    }
-  }
-
-  // Helper function to perform the actual analysis
-  const performAnalysis = async (preFilteredTransactions: any[] | null, analysisDate: string, targetDate: string) => {
-    try {
-      let previousDayTransactions: any[]
+      // Parse target date to get day of week
+      const targetDateObj = new Date(targetDate)
+      const targetDayOfWeek = targetDateObj.getDay() // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
       
-      if (preFilteredTransactions) {
-        previousDayTransactions = preFilteredTransactions
-      } else {
-        // Get transactions from localStorage
-        const storedTransactions = localStorage.getItem("transactions")
-        if (!storedTransactions) {
-          throw new Error("Data transaksi tidak ditemukan")
-        }
-
-        const allTransactions = JSON.parse(storedTransactions)
-        
-        // Filter transactions for the analysis date
-        previousDayTransactions = allTransactions.filter((transaction: any) => {
-          if (!transaction.date) return false
-          
-          try {
-            let transactionDate: string
-            if (transaction.date.includes('/')) {
-              // Handle DD/MM/YYYY format
-              const [day, month, year] = transaction.date.split('/')
-              const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
-              transactionDate = dateObj.toISOString().split('T')[0]
-            } else {
-              const dateObj = new Date(transaction.date)
-              transactionDate = dateObj.toISOString().split('T')[0]
-            }
-            return transactionDate === analysisDate
-          } catch {
-            return false
-          }
-        })
+      // Get transactions from localStorage
+      const storedTransactions = localStorage.getItem("transactions")
+      if (!storedTransactions) {
+        throw new Error("Data transaksi tidak ditemukan")
       }
 
-      if (previousDayTransactions.length === 0) {
-        throw new Error(`Tidak ada data transaksi untuk tanggal ${analysisDate}`)
+      const allTransactions = JSON.parse(storedTransactions)
+      
+      // Filter transactions for the same day of week
+      const sameDayTransactions = allTransactions.filter((transaction: any) => {
+        if (!transaction.date) return false
+        
+        try {
+          let transactionDate: Date
+          if (transaction.date.includes('/')) {
+            // Handle DD/MM/YYYY format
+            const [day, month, year] = transaction.date.split('/')
+            transactionDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+          } else {
+            transactionDate = new Date(transaction.date)
+          }
+          
+          // Check if it's the same day of week
+          return transactionDate.getDay() === targetDayOfWeek
+        } catch {
+          return false
+        }
+      })
+
+      if (sameDayTransactions.length === 0) {
+        const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+        throw new Error(`Tidak ada data transaksi untuk hari ${dayNames[targetDayOfWeek]} dalam dataset`)
       }
 
       // Get productMap from localStorage
@@ -415,14 +346,14 @@ export default function ResultsPage() {
 
       // Prepare data for analysis with the same algorithm and parameters
       const analysisData = {
-        transactions: previousDayTransactions,
+        transactions: sameDayTransactions,
         productMap: productMap,
         algorithm: params!.algorithm,
         minSupport: params!.minSupport,
         minConfidence: params!.minConfidence,
       }
 
-      // Call analyze API for previous day data
+      // Call analyze API for same day of week data
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: {
@@ -439,11 +370,12 @@ export default function ResultsPage() {
       const result = await response.json()
 
       // Process the results for daily pattern
+      const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
       const dailyResult: DailyPattern = {
-        date: analysisDate,
+        date: `${dayNames[targetDayOfWeek]} (${sameDayTransactions.length} transaksi)`,
         frequentItemsets: result.frequent_itemsets || [],
         associationRules: result.association_rules || [],
-        transactionCount: previousDayTransactions.length,
+        transactionCount: sameDayTransactions.length,
       }
 
       setDailyPattern(dailyResult)
@@ -461,18 +393,143 @@ export default function ResultsPage() {
               support: rule.support,
               confidence: rule.confidence,
               lift: rule.lift,
-              count: Math.round(rule.support * previousDayTransactions.length),
+              count: Math.round(rule.support * sameDayTransactions.length),
               itemCount: allItems.length,
-              analysisDate: analysisDate,
+              analysisDate: `${dayNames[targetDayOfWeek]}`,
               targetDate: targetDate,
             }
           })
 
         setDailyBundlingOptions(dailyOptions)
       }
-
     } catch (error) {
-      throw error // Re-throw to be caught by parent function
+      console.error("Error analyzing daily pattern:", error)
+      setDailyPatternError(error instanceof Error ? error.message : "Terjadi kesalahan saat menganalisis pola harian")
+    } finally {
+      setDailyPatternLoading(false)
+    }
+  }
+
+  // Function to analyze weekly predictions from latest date
+  const analyzeWeeklyPredictions = async () => {
+    if (!params || !hasDateColumn || availableDates.length === 0) return
+
+    setWeeklyPredictionLoading(true)
+    setWeeklyPredictionError(null)
+    
+    const predictions: {[key: string]: any} = {}
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+    
+    try {
+      // Get transactions from localStorage
+      const storedTransactions = localStorage.getItem("transactions")
+      const storedProductMap = localStorage.getItem("productMap")
+      
+      if (!storedTransactions || !storedProductMap) {
+        throw new Error("Data transaksi atau product map tidak ditemukan")
+      }
+
+      const allTransactions = JSON.parse(storedTransactions)
+      const productMap = JSON.parse(storedProductMap)
+
+      // Get the latest date to calculate next week
+      const latestDate = new Date(availableDates[0])
+      
+      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+        // Calculate next week's date for this day
+        const nextWeekDate = new Date(latestDate)
+        const daysUntilNextWeek = 7 - latestDate.getDay() + dayOfWeek
+        nextWeekDate.setDate(latestDate.getDate() + daysUntilNextWeek)
+        
+        // Filter transactions for the same day of week
+        const sameDayTransactions = allTransactions.filter((transaction: any) => {
+          if (!transaction.date) return false
+          
+          try {
+            let transactionDate: Date
+            if (transaction.date.includes('/')) {
+              const [day, month, year] = transaction.date.split('/')
+              transactionDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+            } else {
+              transactionDate = new Date(transaction.date)
+            }
+            
+            return transactionDate.getDay() === dayOfWeek
+          } catch {
+            return false
+          }
+        })
+
+        if (sameDayTransactions.length > 0) {
+          // Prepare data for analysis
+          const analysisData = {
+            transactions: sameDayTransactions,
+            productMap: productMap,
+            algorithm: params!.algorithm,
+            minSupport: params!.minSupport,
+            minConfidence: params!.minConfidence,
+          }
+
+          try {
+            // Call analyze API
+            const response = await fetch("/api/analyze", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(analysisData),
+            })
+
+            if (response.ok) {
+              const result = await response.json()
+              
+              // Format the prediction date
+              const predictionDateStr = `${nextWeekDate.getDate().toString().padStart(2, '0')}/${(nextWeekDate.getMonth() + 1).toString().padStart(2, '0')}/${nextWeekDate.getFullYear()}`
+              
+              predictions[dayNames[dayOfWeek]] = {
+                dayName: dayNames[dayOfWeek],
+                predictionDate: predictionDateStr,
+                dataSource: `${sameDayTransactions.length} transaksi dari hari ${dayNames[dayOfWeek]} sebelumnya`,
+                frequentItemsets: result.frequent_itemsets || [],
+                associationRules: result.association_rules || [],
+                transactionCount: sameDayTransactions.length,
+                topBundles: result.association_rules ? 
+                  result.association_rules
+                    .sort((a: any, b: any) => b.lift - a.lift)
+                    .slice(0, 5)
+                    .map((rule: any, index: number) => {
+                      const allItems = [...rule.antecedent, ...rule.consequent]
+                      return {
+                        rank: index + 1,
+                        items: allItems.map((item: any) => item.name).join(" + "),
+                        support: rule.support,
+                        confidence: rule.confidence,
+                        lift: rule.lift,
+                        count: Math.round(rule.support * sameDayTransactions.length),
+                      }
+                    }) : []
+              }
+            }
+          } catch (error) {
+            console.error(`Error analyzing ${dayNames[dayOfWeek]}:`, error)
+          }
+        } else {
+          const nextWeekDateStr = `${nextWeekDate.getDate().toString().padStart(2, '0')}/${(nextWeekDate.getMonth() + 1).toString().padStart(2, '0')}/${nextWeekDate.getFullYear()}`
+          predictions[dayNames[dayOfWeek]] = {
+            dayName: dayNames[dayOfWeek],
+            predictionDate: nextWeekDateStr,
+            dataSource: "Tidak ada data historis",
+            error: `Tidak ada data transaksi untuk hari ${dayNames[dayOfWeek]} dalam dataset`
+          }
+        }
+      }
+
+      setWeeklyPredictions(predictions)
+    } catch (error) {
+      console.error("Error analyzing weekly predictions:", error)
+      setWeeklyPredictionError(error instanceof Error ? error.message : "Terjadi kesalahan saat menganalisis prediksi mingguan")
+    } finally {
+      setWeeklyPredictionLoading(false)
     }
   }
 
@@ -879,7 +936,7 @@ export default function ResultsPage() {
                             <TableCell>{index + 1}</TableCell>
                             <TableCell className="font-medium">{bundle.items}</TableCell>
                             <TableCell className="text-right">{(bundle.support * 100).toFixed(2)}%</TableCell>
-                            <TableCell className="text-right">{(bundle.confidence * 100).toFixed(2)}%</TableCell>
+                            <TableCell className="text-right">{(bundle.conference * 100).toFixed(2)}%</TableCell>
                             <TableCell className="text-right">{bundle.lift.toFixed(2)}</TableCell>
                             <TableCell className="text-right">{bundle.count}</TableCell>
                           </TableRow>
@@ -891,11 +948,12 @@ export default function ResultsPage() {
               </Card>
 
               <Tabs defaultValue="visualization">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="visualization">Visualisasi</TabsTrigger>
                   <TabsTrigger value="algorithm">Visualisasi Algoritma</TabsTrigger>
                   <TabsTrigger value="details">Detail Hasil</TabsTrigger>
                   {hasDateColumn && <TabsTrigger value="daily-pattern">Pola Harian</TabsTrigger>}
+                  {hasDateColumn && <TabsTrigger value="weekly-prediction">Prediksi Minggu Depan</TabsTrigger>}
                 </TabsList>
 
                 <TabsContent value="visualization" className="mt-4">
@@ -1109,15 +1167,27 @@ export default function ResultsPage() {
                   <TabsContent value="daily-pattern" className="mt-4">
                     <Card>
                       <CardHeader>
-                        <CardTitle>Analisis Pola Bundling Harian</CardTitle>
+                        <CardTitle>Analisis Pola Bundling Berdasarkan Hari</CardTitle>
                         <CardDescription>
-                          Analisis pola bundling berdasarkan data hari sebelumnya
+                          Analisis ini menggunakan semua data transaksi yang terjadi pada hari yang sama dalam seminggu. 
+                          Contoh: Jika Anda memilih tanggal Senin 14/04/2025, sistem akan menganalisis semua data transaksi 
+                          yang terjadi di hari Senin sepanjang periode dataset untuk menemukan pola bundling yang khas untuk hari Senin.
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="bg-blue-50 p-4 rounded-lg border">
-                          <h4 className="font-medium text-blue-800 mb-2">Informasi Dataset</h4>
-                          <p className="text-sm text-blue-700">
+                          <h4 className="font-medium text-blue-800 mb-2">Cara Kerja Algoritma</h4>
+                          <div className="text-sm text-blue-700 space-y-2">
+                            <p><strong>1. Identifikasi Hari:</strong> Sistem mengidentifikasi hari dalam seminggu dari tanggal yang dipilih (Senin, Selasa, dst.)</p>
+                            <p><strong>2. Filter Data:</strong> Mengumpulkan semua transaksi yang terjadi pada hari yang sama sepanjang periode dataset</p>
+                            <p><strong>3. Analisis Market Basket:</strong> Menjalankan algoritma {params?.algorithm === "eclat" ? "Eclat" : "FP-Growth"} pada data yang telah difilter</p>
+                            <p><strong>4. Hasil:</strong> Mendapatkan pola bundling yang spesifik untuk hari tersebut dengan parameter minimum support {params ? (params.minSupport * 100).toFixed(1) : 0}% dan confidence {params ? (params.minConfidence * 100).toFixed(1) : 0}%</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-green-50 p-4 rounded-lg border">
+                          <h4 className="font-medium text-green-800 mb-2">Informasi Dataset</h4>
+                          <p className="text-sm text-green-700">
                             Dataset memiliki {availableDates.length} hari dengan data transaksi.
                             Tanggal tersedia: {availableDates.length > 0 && (() => {
                               const firstDate = new Date(availableDates[availableDates.length - 1])
@@ -1131,11 +1201,11 @@ export default function ResultsPage() {
 
                         <div className="flex items-center space-x-4">
                           <label htmlFor="target-date" className="text-sm font-medium">
-                            Pilih Tanggal Target:
+                            Pilih Tanggal (Untuk Menentukan Hari dalam Seminggu):
                           </label>
                           <Select value={selectedDate} onValueChange={setSelectedDate}>
                             <SelectTrigger className="w-48">
-                              <SelectValue placeholder="Pilih tanggal..." />
+                              <SelectValue placeholder="Pilih tanggal untuk menentukan hari..." />
                             </SelectTrigger>
                             <SelectContent>
                               {availableDates.map((date) => {
@@ -1172,15 +1242,15 @@ export default function ResultsPage() {
                         )}
 
                         {selectedDate && (
-                          <div className="text-sm text-muted-foreground">
-                            Akan menganalisis data dari: {(() => {
-                              const targetDateObj = new Date(selectedDate)
-                              const previousDateObj = new Date(targetDateObj)
-                              previousDateObj.setDate(targetDateObj.getDate() - 1)
-                              const displayDate = `${previousDateObj.getDate().toString().padStart(2, '0')}/${(previousDateObj.getMonth() + 1).toString().padStart(2, '0')}/${previousDateObj.getFullYear()}`
-                              const dayName = previousDateObj.toLocaleDateString('id-ID', { weekday: 'long' })
-                              return `${displayDate} (${dayName})`
-                            })()}
+                          <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                            <h5 className="font-medium text-yellow-800 mb-1">Analisis yang Akan Dilakukan:</h5>
+                            <p className="text-sm text-yellow-700">
+                              Sistem akan menganalisis semua transaksi yang terjadi pada hari {(() => {
+                                const targetDateObj = new Date(selectedDate)
+                                const dayName = targetDateObj.toLocaleDateString('id-ID', { weekday: 'long' })
+                                return dayName
+                              })()} dalam dataset untuk menemukan pola bundling produk yang khas untuk hari tersebut.
+                            </p>
                           </div>
                         )}
 
@@ -1220,7 +1290,9 @@ export default function ResultsPage() {
                                 <CardHeader>
                                   <CardTitle>Top 10 Rekomendasi Bundling Harian</CardTitle>
                                   <CardDescription>
-                                    Berdasarkan data transaksi tanggal {dailyPattern.date}
+                                    Berdasarkan analisis {dailyPattern.transactionCount} transaksi yang terjadi pada hari {dailyPattern.date.split(' ')[0]} 
+                                    menggunakan algoritma {params?.algorithm === "eclat" ? "Eclat" : "FP-Growth"}. 
+                                    Hasil diurutkan berdasarkan nilai lift tertinggi yang menunjukkan kekuatan asosiasi antar produk.
                                   </CardDescription>
                                 </CardHeader>
                                 <CardContent>
@@ -1280,6 +1352,200 @@ export default function ResultsPage() {
                                           </TableCell>
                                         </TableRow>
                                       ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                )}
+
+                {hasDateColumn && (
+                  <TabsContent value="weekly-prediction" className="mt-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Prediksi Bundling Minggu Depan</CardTitle>
+                        <CardDescription>
+                          Prediksi pola bundling untuk 7 hari ke depan berdasarkan analisis semua data historis 
+                          untuk setiap hari dalam seminggu. Sistem menggunakan pola yang ditemukan dari hari yang sama 
+                          (misalnya semua data Senin) untuk memprediksi rekomendasi bundling untuk Senin minggu depan.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="bg-green-50 p-4 rounded-lg border">
+                          <h4 className="font-medium text-green-800 mb-2">Metodologi Prediksi</h4>
+                          <div className="text-sm text-green-700 space-y-2">
+                            <p><strong>1. Analisis Per Hari:</strong> Sistem menganalisis semua transaksi untuk setiap hari dalam seminggu secara terpisah</p>
+                            <p><strong>2. Algoritma Machine Learning:</strong> Menggunakan {params?.algorithm === "eclat" ? "algoritma Eclat" : "algoritma FP-Growth"} untuk menemukan frequent itemsets dan association rules</p>
+                            <p><strong>3. Ranking Berdasarkan Lift:</strong> Rekomendasi diurutkan berdasarkan nilai lift yang menunjukkan seberapa kuat hubungan antar produk</p>
+                            <p><strong>4. Prediksi Akurat:</strong> Semakin banyak data historis untuk setiap hari, semakin akurat prediksi yang dihasilkan</p>
+                          </div>
+                          
+                          <div className="mt-3 pt-3 border-t border-green-200">
+                            <p className="text-sm text-green-700">
+                              <strong>Periode Prediksi:</strong> {availableDates.length > 0 && (() => {
+                                const latestDate = new Date(availableDates[0])
+                                const nextMonday = new Date(latestDate)
+                                const daysUntilMonday = 7 - latestDate.getDay() + 1
+                                nextMonday.setDate(latestDate.getDate() + daysUntilMonday)
+                                
+                                const nextSunday = new Date(nextMonday)
+                                nextSunday.setDate(nextMonday.getDate() + 6)
+                                
+                                const mondayDisplay = `${nextMonday.getDate().toString().padStart(2, '0')}/${(nextMonday.getMonth() + 1).toString().padStart(2, '0')}/${nextMonday.getFullYear()}`
+                                const sundayDisplay = `${nextSunday.getDate().toString().padStart(2, '0')}/${(nextSunday.getMonth() + 1).toString().padStart(2, '0')}/${nextSunday.getFullYear()}`
+                                
+                                return `${mondayDisplay} - ${sundayDisplay}`
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-center">
+                            <Button
+                            onClick={analyzeWeeklyPredictions}
+                            disabled={weeklyPredictionLoading || availableDates.length === 0}
+                            size="lg"
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            {weeklyPredictionLoading ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                                Menganalisis 7 Hari...
+                              </>
+                            ) : (
+                              "🔮 Buat Prediksi Minggu Depan"
+                            )}
+                          </Button>
+                        </div>
+
+                        {weeklyPredictionError && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Error</AlertTitle>
+                            <AlertDescription>{weeklyPredictionError}</AlertDescription>
+                          </Alert>
+                        )}
+
+                        {Object.keys(weeklyPredictions).length > 0 && (
+                          <div className="space-y-6">
+                            <h3 className="text-lg font-medium">Prediksi Bundling per Hari</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day) => {
+                                const prediction = weeklyPredictions[day]
+                                if (!prediction) return null
+
+                                return (
+                                  <Card key={day} className="h-full">
+                                    <CardHeader className="pb-3">
+                                      <CardTitle className="text-lg">{day}</CardTitle>
+                                      <CardDescription>
+                                        {prediction.predictionDate}
+                                      </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                      <div className="text-xs text-muted-foreground">
+                                        {prediction.dataSource}
+                                      </div>
+
+                                      {prediction.error ? (
+                                        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                                          {prediction.error}
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <div>
+                                              <span className="font-medium">Frequent Items:</span>
+                                              <div className="text-blue-600">{prediction.frequentItemsets?.length || 0}</div>
+                                            </div>
+                                            <div>
+                                              <span className="font-medium">Association Rules:</span>
+                                              <div className="text-green-600">{prediction.associationRules?.length || 0}</div>
+                                            </div>
+                                          </div>
+
+                                          {prediction.topBundles && prediction.topBundles.length > 0 && (
+                                            <div>
+                                              <div className="font-medium text-sm mb-2">Top 3 Rekomendasi:</div>
+                                              <div className="space-y-1">
+                                                {prediction.topBundles.slice(0, 3).map((bundle: any, idx: number) => (
+                                                  <div key={idx} className="text-xs p-2 bg-slate-50 rounded">
+                                                    <div className="font-medium">{bundle.items}</div>
+                                                    <div className="text-muted-foreground">
+                                                      Lift: {bundle.lift.toFixed(2)} | Confidence: {(bundle.confidence * 100).toFixed(1)}%
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                    </CardContent>
+                                  </Card>
+                                )
+                              })}
+                            </div>
+
+                            {/* Detailed weekly summary */}
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>Ringkasan Prediksi Mingguan</CardTitle>
+                                <CardDescription>
+                                  Kombinasi terbaik untuk setiap hari dalam minggu depan
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="border rounded-md overflow-auto">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Hari</TableHead>
+                                        <TableHead>Tanggal</TableHead>
+                                        <TableHead>Rekomendasi Utama</TableHead>
+                                        <TableHead className="text-right">Lift</TableHead>
+                                        <TableHead className="text-right">Confidence</TableHead>
+                                        <TableHead>Data Source</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day) => {
+                                        const prediction = weeklyPredictions[day]
+                                        if (!prediction) return null
+
+                                        const topBundle = prediction.topBundles?.[0]
+                                        
+                                        return (
+                                          <TableRow key={day}>
+                                            <TableCell className="font-medium">{day}</TableCell>
+                                            <TableCell>{prediction.predictionDate}</TableCell>
+                                            <TableCell>
+                                              {prediction.error ? (
+                                                <span className="text-red-600 text-sm">Tidak ada data</span>
+                                              ) : topBundle ? (
+                                                <span className="text-sm">{topBundle.items}</span>
+                                              ) : (
+                                                <span className="text-muted-foreground text-sm">Tidak ada rekomendasi</span>
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                              {topBundle ? topBundle.lift.toFixed(2) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                              {topBundle ? (topBundle.confidence * 100).toFixed(1) + '%' : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                              {prediction.transactionCount ? `${prediction.transactionCount} transaksi` : 'Tidak ada data'}
+                                            </TableCell>
+                                          </TableRow>
+                                        )
+                                      })}
                                     </TableBody>
                                   </Table>
                                 </div>

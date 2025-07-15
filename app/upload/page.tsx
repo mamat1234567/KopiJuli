@@ -6,6 +6,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, FileUp, Upload } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
@@ -158,6 +159,112 @@ export default function UploadPage() {
             Unggah File
           </Button>
         </CardFooter>
+      </Card>
+
+      {/* Tabel Contoh Format CSV */}
+      <Card className="w-full max-w-6xl mt-6">
+        <CardHeader>
+          <CardTitle>Contoh Format File CSV</CardTitle>
+          <CardDescription>
+            File CSV harus memiliki kolom-kolom berikut dengan format data seperti contoh di bawah ini
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-center min-w-[60px]">No</TableHead>
+                  <TableHead className="text-center min-w-[100px]">Tanggal</TableHead>
+                  <TableHead className="text-center min-w-[80px]">Hari</TableHead>
+                  <TableHead className="text-center min-w-[100px]">Tipe Layanan</TableHead>
+                  <TableHead className="text-center min-w-[100px]">No Invoice</TableHead>
+                  <TableHead className="text-center min-w-[100px]">ID Produk</TableHead>
+                  <TableHead className="text-center min-w-[150px]">Detail Menu</TableHead>
+                  <TableHead className="text-center min-w-[100px]">Harga Satuan</TableHead>
+                  <TableHead className="text-center min-w-[120px]">Waktu Pembelian</TableHead>
+                  <TableHead className="text-center min-w-[80px]">Shift</TableHead>
+                  <TableHead className="text-center min-w-[120px]">Member Name</TableHead>
+                  <TableHead className="text-center min-w-[100px]">Member ID</TableHead>
+                  <TableHead className="text-center min-w-[80px]">Gender</TableHead>
+                  <TableHead className="text-center min-w-[60px]">Usia</TableHead>
+                  <TableHead className="text-center min-w-[100px]">Bonus Member</TableHead>
+                  <TableHead className="text-center min-w-[100px]">Jumlah Item</TableHead>
+                  <TableHead className="text-center min-w-[120px]">Metode Pembayaran</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="text-center">2</TableCell>
+                  <TableCell className="text-center">15/04/2025</TableCell>
+                  <TableCell className="text-center">Selasa</TableCell>
+                  <TableCell className="text-center">Dine In</TableCell>
+                  <TableCell className="text-center">INV-2952</TableCell>
+                  <TableCell className="text-center">FOOD0003</TableCell>
+                  <TableCell className="text-center">Pie Susu</TableCell>
+                  <TableCell className="text-center">20000</TableCell>
+                  <TableCell className="text-center">18:10</TableCell>
+                  <TableCell className="text-center">Malam</TableCell>
+                  <TableCell className="text-center">NONMEMBER</TableCell>
+                  <TableCell className="text-center">NONMEMBER</TableCell>
+                  <TableCell className="text-center">Tidak Diketahui</TableCell>
+                  <TableCell className="text-center">0</TableCell>
+                  <TableCell className="text-center">0</TableCell>
+                  <TableCell className="text-center">1</TableCell>
+                  <TableCell className="text-center">Kartu Debit</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-center">3</TableCell>
+                  <TableCell className="text-center">15/04/2025</TableCell>
+                  <TableCell className="text-center">Selasa</TableCell>
+                  <TableCell className="text-center">Dine In</TableCell>
+                  <TableCell className="text-center">INV-2952</TableCell>
+                  <TableCell className="text-center">FOOD0001</TableCell>
+                  <TableCell className="text-center">Basque Cheese Cake</TableCell>
+                  <TableCell className="text-center">20000</TableCell>
+                  <TableCell className="text-center">18:10</TableCell>
+                  <TableCell className="text-center">Malam</TableCell>
+                  <TableCell className="text-center">NONMEMBER</TableCell>
+                  <TableCell className="text-center">NONMEMBER</TableCell>
+                  <TableCell className="text-center">Tidak Diketahui</TableCell>
+                  <TableCell className="text-center">0</TableCell>
+                  <TableCell className="text-center">0</TableCell>
+                  <TableCell className="text-center">1</TableCell>
+                  <TableCell className="text-center">Kartu Debit</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-center">4</TableCell>
+                  <TableCell className="text-center">15/04/2025</TableCell>
+                  <TableCell className="text-center">Selasa</TableCell>
+                  <TableCell className="text-center">Dine In</TableCell>
+                  <TableCell className="text-center">INV-2952</TableCell>
+                  <TableCell className="text-center">BEV0004</TableCell>
+                  <TableCell className="text-center">macha</TableCell>
+                  <TableCell className="text-center">20000</TableCell>
+                  <TableCell className="text-center">18:10</TableCell>
+                  <TableCell className="text-center">Malam</TableCell>
+                  <TableCell className="text-center">NONMEMBER</TableCell>
+                  <TableCell className="text-center">NONMEMBER</TableCell>
+                  <TableCell className="text-center">Tidak Diketahui</TableCell>
+                  <TableCell className="text-center">0</TableCell>
+                  <TableCell className="text-center">0</TableCell>
+                  <TableCell className="text-center">1</TableCell>
+                  <TableCell className="text-center">Kartu Debit</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+            <h4 className="font-semibold text-blue-900 mb-2">Catatan Penting:</h4>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li>• File harus dalam format CSV (.csv)</li>
+              <li>• Pastikan semua kolom yang diperlukan tersedia</li>
+              <li>• Format tanggal harus DD/MM/YYYY</li>
+              <li>• Kolom "No Invoice" digunakan untuk mengelompokkan item dalam satu transaksi</li>
+              <li>• Kolom "Detail Menu" akan digunakan untuk analisis market basket</li>
+            </ul>
+          </div>
+        </CardContent>
       </Card>
     </div>
   )

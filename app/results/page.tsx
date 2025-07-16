@@ -936,7 +936,7 @@ export default function ResultsPage() {
                             <TableCell>{index + 1}</TableCell>
                             <TableCell className="font-medium">{bundle.items}</TableCell>
                             <TableCell className="text-right">{(bundle.support * 100).toFixed(2)}%</TableCell>
-                            <TableCell className="text-right">{(bundle.conference * 100).toFixed(2)}%</TableCell>
+                            <TableCell className="text-right">{(bundle.confidence * 100).toFixed(2)}%</TableCell>
                             <TableCell className="text-right">{bundle.lift.toFixed(2)}</TableCell>
                             <TableCell className="text-right">{bundle.count}</TableCell>
                           </TableRow>
